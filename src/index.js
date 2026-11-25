@@ -35,7 +35,7 @@ function corsHeaders(origin) {
         ? origin
         : "https://furmate-b50c4.web.app",
     "Vary": "Origin",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
     "Access-Control-Allow-Headers":
       "Authorization, Content-Type",
   };
