@@ -107,16 +107,16 @@ function getCalories(food) {
 }
 
 
-async function handlePetImage(request, env, uid, petId) {
-  // Use a stable, user-specific R2 object key.
-  const key = `users/${uid}/pets/${petId}/profile`;
 
+async function handleImage(request, env, key) {
   if (request.method === "PUT") {
+    const maxSize = 5 * 1024 * 1024;
+
     const contentLength = Number(
       request.headers.get("Content-Length") || 0
     );
 
-    if (contentLength > 5 * 1024 * 1024) {
+    if (contentLength > maxSize) {
       return Response.json(
         { error: "Image exceeds 5 MB" },
         { status: 413 }
@@ -126,7 +126,7 @@ async function handlePetImage(request, env, uid, petId) {
     const bytes = await request.arrayBuffer();
 
     if (bytes.byteLength === 0 ||
-        bytes.byteLength > 5 * 1024 * 1024) {
+        bytes.byteLength > maxSize) {
       return Response.json(
         { error: "Image must be between 1 byte and 5 MB" },
         { status: 413 }
@@ -135,27 +135,35 @@ async function handlePetImage(request, env, uid, petId) {
 
     const b = new Uint8Array(bytes);
 
-    const isJpeg = b.length >= 3 &&
-      b[0] === 0xff && b[1] === 0xd8 &&
+    const isJpeg =
+      b.length >= 3 &&
+      b[0] === 0xff &&
+      b[1] === 0xd8 &&
       b[2] === 0xff;
 
-    const isPng = b.length >= 8 &&
-      b[0] === 0x89 && b[1] === 0x50 &&
-      b[2] === 0x4e && b[3] === 0x47 &&
-      b[4] === 0x0d && b[5] === 0x0a &&
-      b[6] === 0x1a && b[7] === 0x0a;
+    const isPng =
+      b.length >= 8 &&
+      b[0] === 0x89 &&
+      b[1] === 0x50 &&
+      b[2] === 0x4e &&
+      b[3] === 0x47 &&
+      b[4] === 0x0d &&
+      b[5] === 0x0a &&
+      b[6] === 0x1a &&
+      b[7] === 0x0a;
 
-    const isWebp = b.length >= 12 &&
+    const isWebp =
+      b.length >= 12 &&
       String.fromCharCode(...b.slice(0, 4)) === "RIFF" &&
       String.fromCharCode(...b.slice(8, 12)) === "WEBP";
 
     const contentType = isJpeg
       ? "image/jpeg"
       : isPng
-      ? "image/png"
-      : isWebp
-      ? "image/webp"
-      : null;
+        ? "image/png"
+        : isWebp
+          ? "image/webp"
+          : null;
 
     if (!contentType) {
       return Response.json(
@@ -170,7 +178,7 @@ async function handlePetImage(request, env, uid, petId) {
 
     return Response.json({
       imagePath: key,
-      message: "Pet image saved",
+      message: "Image saved successfully",
     });
   }
 
@@ -215,6 +223,56 @@ export default {
         headers,
       });
     }
+
+		
+		const url = new URL(request.url);
+		
+		const petMatch = url.pathname.match(
+		  /^\/api\/pets\/([A-Za-z0-9_-]{1,128})\/image$/
+		);
+		
+		const isUserProfile =
+		  url.pathname === "/api/users/me/image";
+		
+		if (petMatch || isUserProfile) {
+		  let uid;
+		
+		  try {
+		    uid = await verifyUser(request);
+		  } catch {
+		    return withCors(
+		      Response.json(
+		        { error: "Unauthorized" },
+		        { status: 401 }
+		      ),
+		      request
+		    );
+		  }
+		
+		  const key = isUserProfile
+		    ? `users/${uid}/profile/avatar`
+		    : `users/${uid}/pets/${petMatch[1]}/profile`;
+		
+		  try {
+		    const response = await handleImage(
+		      request,
+		      env,
+		      key
+		    );
+		
+		    return withCors(response, request);
+		  } catch (error) {
+		    console.error("Image request failed:", error);
+		
+		    return withCors(
+		      Response.json(
+		        { error: "Image service unavailable" },
+		        { status: 500 }
+		      ),
+		      request
+		    );
+		  }
+		}
 
     if (
       request.method !== "GET" ||
