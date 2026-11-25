@@ -13,7 +13,7 @@
 	"r2_buckets": [
 	  {
 	    "binding": "PET_IMAGES",
-	    "bucket_name": "furmate-pet-images"
+	    "bucket_name": "furmate-images"
 	  }
 	]
 	"upload_source_maps": true
