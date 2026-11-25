@@ -223,9 +223,6 @@ export default {
         headers,
       });
     }
-
-		
-		const url = new URL(request.url);
 		
 		const petMatch = url.pathname.match(
 		  /^\/api\/pets\/([A-Za-z0-9_-]{1,128})\/image$/
