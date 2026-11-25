@@ -106,6 +106,104 @@ function getCalories(food) {
   return null;
 }
 
+
+async function handlePetImage(request, env, uid, petId) {
+  // Use a stable, user-specific R2 object key.
+  const key = `users/${uid}/pets/${petId}/profile`;
+
+  if (request.method === "PUT") {
+    const contentLength = Number(
+      request.headers.get("Content-Length") || 0
+    );
+
+    if (contentLength > 5 * 1024 * 1024) {
+      return Response.json(
+        { error: "Image exceeds 5 MB" },
+        { status: 413 }
+      );
+    }
+
+    const bytes = await request.arrayBuffer();
+
+    if (bytes.byteLength === 0 ||
+        bytes.byteLength > 5 * 1024 * 1024) {
+      return Response.json(
+        { error: "Image must be between 1 byte and 5 MB" },
+        { status: 413 }
+      );
+    }
+
+    const b = new Uint8Array(bytes);
+
+    const isJpeg = b.length >= 3 &&
+      b[0] === 0xff && b[1] === 0xd8 &&
+      b[2] === 0xff;
+
+    const isPng = b.length >= 8 &&
+      b[0] === 0x89 && b[1] === 0x50 &&
+      b[2] === 0x4e && b[3] === 0x47 &&
+      b[4] === 0x0d && b[5] === 0x0a &&
+      b[6] === 0x1a && b[7] === 0x0a;
+
+    const isWebp = b.length >= 12 &&
+      String.fromCharCode(...b.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...b.slice(8, 12)) === "WEBP";
+
+    const contentType = isJpeg
+      ? "image/jpeg"
+      : isPng
+      ? "image/png"
+      : isWebp
+      ? "image/webp"
+      : null;
+
+    if (!contentType) {
+      return Response.json(
+        { error: "Only JPEG, PNG and WebP are supported" },
+        { status: 415 }
+      );
+    }
+
+    await env.PET_IMAGES.put(key, bytes, {
+      httpMetadata: { contentType },
+    });
+
+    return Response.json({
+      imagePath: key,
+      message: "Pet image saved",
+    });
+  }
+
+  if (request.method === "GET") {
+    const object = await env.PET_IMAGES.get(key);
+
+    if (!object) {
+      return Response.json(
+        { error: "Image not found" },
+        { status: 404 }
+      );
+    }
+
+    return new Response(object.body, {
+      headers: {
+        "Content-Type":
+          object.httpMetadata?.contentType ||
+          "application/octet-stream",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
+  return Response.json(
+    { error: "Method not allowed" },
+    {
+      status: 405,
+      headers: { Allow: "GET, PUT" },
+    }
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
