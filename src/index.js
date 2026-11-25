@@ -224,52 +224,59 @@ export default {
       });
     }
 		
-		const petMatch = url.pathname.match(
-		  /^\/api\/pets\/([A-Za-z0-9_-]{1,128})\/image$/
-		);
-		
-		const isUserProfile =
-		  url.pathname === "/api/users/me/image";
-		
-		if (petMatch || isUserProfile) {
-		  let uid;
-		
-		  try {
-		    uid = await verifyUser(request);
-		  } catch {
-		    return withCors(
-		      Response.json(
-		        { error: "Unauthorized" },
-		        { status: 401 }
-		      ),
-		      request
-		    );
-		  }
-		
-		  const key = isUserProfile
-		    ? `users/${uid}/profile/avatar`
-		    : `users/${uid}/pets/${petMatch[1]}/profile`;
-		
-		  try {
-		    const response = await handleImage(
-		      request,
-		      env,
-		      key
-		    );
-		
-		    return withCors(response, request);
-		  } catch (error) {
-		    console.error("Image request failed:", error);
-		
-		    return withCors(
-		      Response.json(
-		        { error: "Image service unavailable" },
-		        { status: 500 }
-		      ),
-		      request
-		    );
-		  }
-		}
+    const petMatch = url.pathname.match(
+      /^\/api\/pets\/([A-Za-z0-9_-]{1,128})\/image$/
+    );
+
+    const isUserProfile =
+      url.pathname === "/api/users/me/image";
+
+    if (petMatch || isUserProfile) {
+      let uid;
+
+      try {
+        uid = await verifyUser(request);
+      } catch {
+        return jsonResponse(
+          { error: "Unauthorized" },
+          401,
+          headers
+        );
+      }
+
+      const key = isUserProfile
+        ? `users/${uid}/profile/avatar`
+        : `users/${uid}/pets/${petMatch[1]}/profile`;
+
+      try {
+        const response = await handleImage(
+          request,
+          env,
+          key
+        );
+
+        // Add CORS headers to the original response.
+        const responseHeaders = new Headers(response.headers);
+
+        for (const [name, value] of Object.entries(headers)) {
+          responseHeaders.set(name, value);
+        }
+
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+        });
+      } catch (error) {
+        console.error("Image request failed:", error);
+
+        return jsonResponse(
+          { error: "Image service unavailable" },
+          500,
+          headers
+        );
+      }
+    }
 
     if (
       request.method !== "GET" ||
